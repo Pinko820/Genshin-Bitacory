@@ -5,7 +5,9 @@ const config = window.BITACORA_FIREBASE_CONFIG || {};
 const configured = config.apiKey && config.apiKey !== 'REEMPLAZAR' && config.projectId !== 'REEMPLAZAR';
 const feedback = msg => { $('#cloudFeedback').textContent = msg; };
 const status = msg => { $('#cloudStatus').textContent = msg; $('#cloudBtn').textContent = '☁ ' + msg; };
-const canonical = x => JSON.stringify(window.G.normalize(x));
+// La huella excluye `conjuntosActivos` (campo derivado, se recalcula al normalizar): así las huellas
+// guardadas por versiones ≤4.5 siguen coincidiendo y no se generan conflictos falsos ni subidas masivas.
+const canonical = x => { const { conjuntosActivos, ...src } = window.G.normalize(x); return JSON.stringify(src); };
 const uid = () => window.G.uid();
 const storeKey = user => `genshin-cloud-v4-${user}`;
 const read = key => { try { return JSON.parse(localStorage.getItem(key)); } catch { return null; } };

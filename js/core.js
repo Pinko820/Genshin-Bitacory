@@ -2,6 +2,9 @@
 	'use strict';
 
 	const slots = ['Flor', 'Pluma', 'Reloj', 'Cáliz', 'Tiara'];
+	// Motor de conjuntos (js/sets.js). Si no se cargara, la app sigue funcionando sin el campo derivado.
+	const Sets = window.GSets || null;
+	const computeSets = arts => (Sets ? Sets.compute(arts, slots) : undefined);
 	const elements = ['Anemo', 'Geo', 'Electro', 'Dendro', 'Hydro', 'Pyro', 'Cryo'];
 
 	const esc = v =>
@@ -107,7 +110,8 @@
 			principal: { tipo: '', valor: 0 },
 			secundarias: []
 		})),
-		perfil: 'personalizado'
+		perfil: 'personalizado',
+		conjuntosActivos: computeSets(slots.map(ranura => ({ ranura, conjunto: '' })))
 	});
 
 	function normalize(input) {
@@ -165,6 +169,11 @@
 					.map(v => ({ tipo: canonicalType(v.tipo, v.valor), valor: n(v.valor) }))
 			};
 		});
+		// Campo DERIVADO: siempre se recalcula desde `artefactos`; cualquier valor entrante
+		// (p. ej. de un JSON exportado en 4.6 con datos viejos) se descarta.
+		// Los JSON anteriores (v1–v4) no lo traen y se calculan al normalizar.
+		if (Sets) d.conjuntosActivos = computeSets(d.artefactos);
+		else delete d.conjuntosActivos;
 		return d;
 	}
 
@@ -249,6 +258,10 @@ Normal ${c.talentos?.normal || 0} · Elemental ${c.talentos?.elemental || 0} · 
 ## Aquelarre / talentos especiales
 ${(c.aquelarres || []).map(t => `- ${t.nombre} (Nv. ${t.nivel}): ${t.descripcion}`).join('\n') || 'Ninguno'}
 
+## Conjuntos de artefactos
+${Sets ? Sets.summary(c.conjuntosActivos || computeSets(c.artefactos)) : '—'}
+${Sets ? Sets.withDescriptions(c.conjuntosActivos || computeSets(c.artefactos)).map(b => `- ${b.conjunto} (${b.piezas} piezas)${b.descripcion ? ': ' + b.descripcion : ''}`).join('\n') : ''}
+
 ## Artefactos
 ${(c.artefactos || [])
 	.map(
@@ -279,6 +292,8 @@ ${(c.artefactos || [])
 		cv,
 		derived,
 		quality,
-		markdown
+		markdown,
+		conjuntos: Sets,
+		calcularConjuntos: c => computeSets(Array.isArray(c) ? c : c?.artefactos)
 	};
 })();
