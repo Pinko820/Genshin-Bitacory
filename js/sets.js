@@ -1,7 +1,7 @@
 /* Bitácora Genshin 4.6 — motor de bonos de conjuntos de artefactos.
  *
- * Módulo puro (sin DOM ni almacenamiento). Se carga antes de core.js y se expone como
- * window.GSets; core.js lo integra en G.normalize (campo derivado `conjuntosActivos`).
+ * Módulo puro (sin almacenamiento ni estado global). Se carga antes de core.js y se expone
+ * como window.GSets; core.js lo integra en G.normalize (campo derivado `conjuntosActivos`).
  *
  * Reglas:
  *  - Un artefacto cuenta para un conjunto si su campo `conjunto` no está vacío.
@@ -23,7 +23,7 @@
 
 	function keyOf(name) {
 		return String(name ?? '')
-			.normalize('NFD').replace(/[̀-ͯ]/g, '')
+			.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 			.toLowerCase()
 			.replace(/[^a-z0-9ñ\s]/g, ' ')
 			.replace(/\s+/g, ' ')
@@ -31,6 +31,15 @@
 	}
 
 	const cleanName = name => String(name ?? '').replace(/\s+/g, ' ').trim();
+
+	function escapeHTML(str) {
+		return String(str ?? '')
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;')
+			.replace(/'/g, '&#39;');
+	}
 
 	/* ---------- Catálogo (extensible) ---------- */
 
@@ -180,6 +189,94 @@
 		return act.map(g => `${g.nombre} (${g.bonosActivos.length ? Math.max(...g.bonosActivos) : 0}p)`).join(' + ');
 	}
 
+	/* ---------- Presentación UI v4.6 (Editor y Tarjeta Final) ---------- */
+
+	function resolveEstado(input) {
+		if (Array.isArray(input)) return compute(input);
+		if (input && Array.isArray(input.conjuntos)) return input;
+		if (input && input.conjuntosActivos && Array.isArray(input.conjuntosActivos.conjuntos)) {
+			return input.conjuntosActivos;
+		}
+		if (input && Array.isArray(input.artefactos)) return compute(input.artefactos);
+		return compute([]);
+	}
+
+	const TIPO_LABELS = {
+		cuatro_piezas: 'Conjunto Completo (4 Piezas)',
+		dos_mas_dos: 'Combinación Híbrida (2 + 2 Piezas)',
+		dos_piezas: 'Bono Parcial (2 Piezas)',
+		sin_bono: 'Sin bonos de conjunto activos'
+	};
+
+	/**
+	 * Estructura lista para renderizar en UI o plantillas: acepta un estado de compute(),
+	 * un objeto personaje o un array de artefactos.
+	 */
+	function formatBonuses(input) {
+		const estado = resolveEstado(input);
+		const activos = (estado.conjuntos || []).filter(g => g.activo);
+		const items = activos.map(g => {
+			const maxUmbral = g.bonosActivos.length ? Math.max(...g.bonosActivos) : g.piezas;
+			const detalles = g.bonosActivos
+				.map(u => {
+					const desc = describe(g.nombre, u);
+					return desc ? `${u}p: ${desc}` : '';
+				})
+				.filter(Boolean);
+			return {
+				nombre: g.nombre,
+				piezas: g.piezas,
+				umbralActivo: maxUmbral,
+				badgeClass: maxUmbral >= 4 ? 'p4' : 'p2',
+				badgeLabel: maxUmbral >= 4 ? '4 Piezas' : '2 Piezas',
+				descripciones: detalles,
+				texto: detalles.join(' · ')
+			};
+		});
+
+		return {
+			tipo: estado.tipo,
+			titulo: TIPO_LABELS[estado.tipo] || TIPO_LABELS.sin_bono,
+			patron: estado.patron,
+			resumen: summary(estado),
+			items,
+			sueltas: estado.sueltas || []
+		};
+	}
+
+	/**
+	 * Genera el marcado HTML seguro para mostrar los bonos activos en el editor
+	 * (#editorSetBonuses) o en la ficha/previsualización.
+	 */
+	function renderHTML(input, opts = {}) {
+		const data = formatBonuses(input);
+		const compact = Boolean(opts.compact);
+
+		if (!data.items.length) {
+			return `
+				<div class="set-bonus-card">
+					<div class="set-bonus-top">
+						<span class="set-bonus-name">${escapeHTML(data.titulo)}</span>
+						<span class="set-bonus-badge p0">Mixto (${escapeHTML(data.patron)})</span>
+					</div>
+					${compact ? '' : '<p class="set-bonus-text">Equipa 2 o 4 piezas del mismo conjunto para activar sus bonos.</p>'}
+				</div>
+			`.trim();
+		}
+
+		const cards = data.items.map(item => `
+			<div class="set-bonus-card">
+				<div class="set-bonus-top">
+					<span class="set-bonus-name">${escapeHTML(item.nombre)} <small class="muted">(${item.piezas}/5)</small></span>
+					<span class="set-bonus-badge ${item.badgeClass}">${escapeHTML(item.badgeLabel)}</span>
+				</div>
+				${item.texto && !compact ? `<p class="set-bonus-text">${escapeHTML(item.texto)}</p>` : ''}
+			</div>
+		`).join('');
+
+		return cards;
+	}
+
 	/* ---------- Catálogo inicial ---------- */
 	// Solo se incluyen datos verificados con el material del proyecto; ampliar con registerSet().
 	registerSet({
@@ -199,6 +296,8 @@
 		describe,
 		compute,
 		withDescriptions,
-		summary
+		summary,
+		formatBonuses,
+		renderHTML
 	};
 })();

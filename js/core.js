@@ -7,6 +7,9 @@
 	const computeSets = arts => (Sets ? Sets.compute(arts, slots) : undefined);
 	const elements = ['Anemo', 'Geo', 'Electro', 'Dendro', 'Hydro', 'Pyro', 'Cryo'];
 
+	const EXPORT_PATTERN_KEY = 'bitacora_export_pattern_v46';
+	const DEFAULT_EXPORT_PATTERN = '{Personaje}_Nv{Nivel}_{Fecha}';
+
 	const esc = v =>
 		String(v ?? '').replace(/[&<>"']/g, c => ({
 			'&': '&amp;',
@@ -276,6 +279,80 @@ ${(c.artefactos || [])
 	.join('\n\n')}`;
 	}
 
+	/* ---------- Exportación Personalizada v4.6 ---------- */
+
+	function getExportPattern() {
+		try {
+			return localStorage.getItem(EXPORT_PATTERN_KEY) || DEFAULT_EXPORT_PATTERN;
+		} catch {
+			return DEFAULT_EXPORT_PATTERN;
+		}
+	}
+
+	function setExportPattern(pattern) {
+		const clean = String(pattern ?? '').trim() || DEFAULT_EXPORT_PATTERN;
+		try {
+			localStorage.setItem(EXPORT_PATTERN_KEY, clean);
+		} catch {}
+		return clean;
+	}
+
+	/**
+	 * Resuelve un patrón de nombre de archivo ({Personaje}_{Nivel}_{Elemento}_{Set}_{Fecha})
+	 * aceptando tanto un personaje individual como un arreglo de personajes seleccionados.
+	 */
+	function formatExportFilename(pattern, target, ext = 'json') {
+		const tpl = String(pattern ?? '').trim() || getExportPattern();
+		const now = new Date();
+		const fecha = [
+			now.getFullYear(),
+			String(now.getMonth() + 1).padStart(2, '0'),
+			String(now.getDate()).padStart(2, '0')
+		].join('-');
+
+		const list = Array.isArray(target) ? target : target ? [target] : [];
+		const single = list.length === 1 ? list[0] : null;
+
+		const personaje = single
+			? (single.nombre || 'Personaje')
+			: list.length > 1
+			? `Coleccion_${list.length}_personajes`
+			: 'Bitacora_Genshin';
+
+		const nivel = single ? String(single.nivel || '1').replace(/\//g, '-') : 'Varios';
+		const elemento = single ? (single.elemento || 'Elemento') : 'Varios';
+		const constelacion = single ? `C${n(single.constelacion)}` : 'C0';
+
+		let setNombre = 'SinSet';
+		if (single) {
+			const estado = single.conjuntosActivos || computeSets(single.artefactos);
+			const activo = estado?.conjuntos?.find(g => g.activo) || estado?.conjuntos?.[0];
+			if (activo?.nombre) setNombre = activo.nombre;
+		} else if (list.length > 1) {
+			setNombre = 'MultiSet';
+		}
+
+		const raw = tpl
+			.replace(/\{Personaje\}/gi, personaje)
+			.replace(/\{Nivel\}/gi, nivel)
+			.replace(/\{Elemento\}/gi, elemento)
+			.replace(/\{Constelacion\}/gi, constelacion)
+			.replace(/\{Set\}/gi, setNombre)
+			.replace(/\{Fecha\}/gi, fecha);
+
+		const sanitized = raw
+			.normalize('NFD')
+			.replace(/[\u0300-\u036f]/g, '')
+			.replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
+			.replace(/\s+/g, '_')
+			.replace(/_+/g, '_')
+			.replace(/^[_.-]+|[_.-]+$/g, '')
+			.slice(0, 120);
+
+		const cleanExt = String(ext || 'json').replace(/^\./, '');
+		return `${sanitized || 'bitacora_genshin'}.${cleanExt}`;
+	}
+
 	window.G = {
 		slots,
 		elements,
@@ -294,6 +371,10 @@ ${(c.artefactos || [])
 		quality,
 		markdown,
 		conjuntos: Sets,
-		calcularConjuntos: c => computeSets(Array.isArray(c) ? c : c?.artefactos)
+		calcularConjuntos: c => computeSets(Array.isArray(c) ? c : c?.artefactos),
+		DEFAULT_EXPORT_PATTERN,
+		getExportPattern,
+		setExportPattern,
+		formatExportFilename
 	};
 })();
