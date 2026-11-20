@@ -1,6 +1,19 @@
-# Bitácora Genshin 4.3 — persistencia local-first, conflictos e imágenes
+# Bitácora Genshin 4.6 — conjuntos de artefactos (parte 1: motor de cálculo)
 
 Aplicación estática compatible con los esquemas de datos v1–v3. No requiere compilación. La edición siempre se aplica primero al estado local; Firebase es un transporte asíncrono opcional.
+
+## Novedades 4.6 (parte 1): bonos de conjuntos de artefactos
+
+- **`js/sets.js` (`window.GSets`)**: motor puro. `GSets.compute(artefactos)` agrupa los 5 artefactos por conjunto (sin distinguir mayúsculas, acentos ni espacios dobles; respeta alias del catálogo) y devuelve el estado de bonos.
+- **Campo derivado `conjuntosActivos`** en cada personaje (se recalcula siempre en `G.normalize`; nunca se confía en el valor entrante):
+  - `tipo`: `cuatro_piezas` (4 o 5 del mismo conjunto), `dos_mas_dos` (dos conjuntos con bono: 2+2, 2+2+1, 3+2), `dos_piezas` (un único bono de 2/3 piezas) o `sin_bono`.
+  - `patron`: reparto de piezas por conjunto, p. ej. `4+1`, `2+2+1`, `5`.
+  - `conjuntos[]`: `nombre`, `piezas`, `ranuras`, `umbrales`, `bonosActivos` (p. ej. `[2,4]`), `activo`, `faltanParaSiguiente`.
+  - `bonosActivos[]`: lista plana `{conjunto, piezas}`; `sueltas[]`: piezas sin bono; `sinConjunto[]`: ranuras sin nombre de conjunto; `equipadas`.
+  - Las descripciones se leen con `GSets.withDescriptions(estado)` y no se guardan en la ficha.
+- **Catálogo extensible**: `GSets.registerSet({nombre, aliases, umbrales, bonos})`. Un conjunto que no esté en el catálogo funciona igual (umbrales 2 y 4). El catálogo inicial solo trae *Caballería Sanguinaria*; amplíalo con datos verificados.
+- **Compatibilidad**: la estructura `artefactos[]` no cambia. Los JSON v1–v4 no traen el campo y se calcula al cargar/importar. La huella de sincronización de `cloud.js` excluye `conjuntosActivos`, por lo que Firestore sigue guardando exactamente el mismo documento que en 4.3–4.5 (sin conflictos falsos y sin interferir con clientes antiguos). Las exportaciones JSON/Markdown sí lo incluyen.
+- La interfaz visual de estos bonos queda para la parte 2.
 
 ## Arquitectura 4.3
 
@@ -41,6 +54,7 @@ service firebase.storage {
 ## Estructura
 
 - `index.html`: aplicación y diálogos de conflictos e imágenes.
+- `js/sets.js`: motor de bonos de conjuntos (4.6).
 - `js/core.js`: normalización y cálculo compatible.
 - `js/app.js`: interfaz y persistencia local-first.
 - `js/cloud.js`: autenticación, sincronización Firestore, conflictos manuales, respaldos e imágenes/Storage.
